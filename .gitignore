@@ -1,4 +1,8 @@
 *.a
+*.obj
+*.exe
+*.dblite
+.vscode
 .obj/
 tests/bjson.so
 examples/test_fib

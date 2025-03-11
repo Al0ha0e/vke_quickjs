@@ -396,62 +396,62 @@ endif
 # examples
 
 # example of static JS compilation
-HELLO_SRCS=examples/hello.js
-HELLO_OPTS=-fno-string-normalize -fno-map -fno-promise -fno-typedarray \
-           -fno-typedarray -fno-regexp -fno-json -fno-eval -fno-proxy \
-           -fno-date -fno-module-loader -fno-bigint
+# HELLO_SRCS=examples/hello.js
+# HELLO_OPTS=-fno-string-normalize -fno-map -fno-promise -fno-typedarray \
+#            -fno-typedarray -fno-regexp -fno-json -fno-eval -fno-proxy \
+#            -fno-date -fno-module-loader -fno-bigint
 
-hello.c: $(QJSC) $(HELLO_SRCS)
-	$(QJSC) -e $(HELLO_OPTS) -o $@ $(HELLO_SRCS)
+# hello.c: $(QJSC) $(HELLO_SRCS)
+# 	$(QJSC) -e $(HELLO_OPTS) -o $@ $(HELLO_SRCS)
 
-ifdef CONFIG_M32
-examples/hello: $(OBJDIR)/hello.m32s.o $(patsubst %.o, %.m32s.o, $(QJS_LIB_OBJS))
-	$(CC) -m32 $(LDFLAGS) -o $@ $^ $(LIBS)
-else
-examples/hello: $(OBJDIR)/hello.o $(QJS_LIB_OBJS)
-	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
-endif
+# ifdef CONFIG_M32
+# examples/hello: $(OBJDIR)/hello.m32s.o $(patsubst %.o, %.m32s.o, $(QJS_LIB_OBJS))
+# 	$(CC) -m32 $(LDFLAGS) -o $@ $^ $(LIBS)
+# else
+# examples/hello: $(OBJDIR)/hello.o $(QJS_LIB_OBJS)
+# 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
+# endif
 
-# example of static JS compilation with modules
-HELLO_MODULE_SRCS=examples/hello_module.js
-HELLO_MODULE_OPTS=-fno-string-normalize -fno-map -fno-promise -fno-typedarray \
-           -fno-typedarray -fno-regexp -fno-json -fno-eval -fno-proxy \
-           -fno-date -m
-examples/hello_module: $(QJSC) libquickjs$(LTOEXT).a $(HELLO_MODULE_SRCS)
-	$(QJSC) $(HELLO_MODULE_OPTS) -o $@ $(HELLO_MODULE_SRCS)
+# # example of static JS compilation with modules
+# HELLO_MODULE_SRCS=examples/hello_module.js
+# HELLO_MODULE_OPTS=-fno-string-normalize -fno-map -fno-promise -fno-typedarray \
+#            -fno-typedarray -fno-regexp -fno-json -fno-eval -fno-proxy \
+#            -fno-date -m
+# examples/hello_module: $(QJSC) libquickjs$(LTOEXT).a $(HELLO_MODULE_SRCS)
+# 	$(QJSC) $(HELLO_MODULE_OPTS) -o $@ $(HELLO_MODULE_SRCS)
 
-# use of an external C module (static compilation)
+# # use of an external C module (static compilation)
 
-test_fib.c: $(QJSC) examples/test_fib.js
-	$(QJSC) -e -M examples/fib.so,fib -m -o $@ examples/test_fib.js
+# test_fib.c: $(QJSC) examples/test_fib.js
+# 	$(QJSC) -e -M examples/fib.so,fib -m -o $@ examples/test_fib.js
 
-examples/test_fib: $(OBJDIR)/test_fib.o $(OBJDIR)/examples/fib.o libquickjs$(LTOEXT).a
-	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
+# examples/test_fib: $(OBJDIR)/test_fib.o $(OBJDIR)/examples/fib.o libquickjs$(LTOEXT).a
+# 	$(CC) $(LDFLAGS) -o $@ $^ $(LIBS)
 
-examples/fib.so: $(OBJDIR)/examples/fib.pic.o
-	$(CC) $(LDFLAGS) -shared -o $@ $^
+# examples/fib.so: $(OBJDIR)/examples/fib.pic.o
+# 	$(CC) $(LDFLAGS) -shared -o $@ $^
 
-examples/point.so: $(OBJDIR)/examples/point.pic.o
-	$(CC) $(LDFLAGS) -shared -o $@ $^
+# examples/point.so: $(OBJDIR)/examples/point.pic.o
+# 	$(CC) $(LDFLAGS) -shared -o $@ $^
 
 ###############################################################################
 # documentation
 
-DOCS=doc/quickjs.pdf doc/quickjs.html doc/jsbignum.pdf doc/jsbignum.html
+# DOCS=doc/quickjs.pdf doc/quickjs.html doc/jsbignum.pdf doc/jsbignum.html
 
-build_doc: $(DOCS)
+# build_doc: $(DOCS)
 
-clean_doc:
-	rm -f $(DOCS)
+# clean_doc:
+# 	rm -f $(DOCS)
 
-doc/%.pdf: doc/%.texi
-	texi2pdf --clean -o $@ -q $<
+# doc/%.pdf: doc/%.texi
+# 	texi2pdf --clean -o $@ -q $<
 
-doc/%.html.pre: doc/%.texi
-	makeinfo --html --no-headers --no-split --number-sections -o $@ $<
+# doc/%.html.pre: doc/%.texi
+# 	makeinfo --html --no-headers --no-split --number-sections -o $@ $<
 
-doc/%.html: doc/%.html.pre
-	sed -e 's|</style>|</style>\n<meta name="viewport" content="width=device-width, initial-scale=1.0">|' < $< > $@
+# doc/%.html: doc/%.html.pre
+# 	sed -e 's|</style>|</style>\n<meta name="viewport" content="width=device-width, initial-scale=1.0">|' < $< > $@
 
 ###############################################################################
 # tests

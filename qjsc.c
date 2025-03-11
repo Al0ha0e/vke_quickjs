@@ -27,7 +27,9 @@
 #include <inttypes.h>
 #include <string.h>
 #include <assert.h>
+#ifndef _MSC_VER
 #include <unistd.h>
+#endif
 #include <errno.h>
 #if !defined(_WIN32)
 #include <sys/wait.h>
@@ -131,6 +133,10 @@ static void get_c_name(char *buf, size_t buf_size, const char *file)
     char *q;
 
     p = strrchr(file, '/');
+#ifdef _MSC_VER
+    if (!p) 
+        p = strrchr(file, '\\');
+#endif
     if (!p)
         p = file;
     else
@@ -512,10 +518,24 @@ int main(int argc, char **argv)
     namelist_add(&cmodule_list, "std", "std", 0);
     namelist_add(&cmodule_list, "os", "os", 0);
 
+#ifdef _MSC_VER
+    int optind = 1;
+    const char *optarg = NULL;
+    for (; optind < argc; ++optind) {
+        if (argv[optind][0] == '-' || argv[optind][0] == '/') {
+            c = argv[optind][1];
+            if (strchr("oNfMpSD", c)) {
+                optarg = argv[++optind];
+            }
+        }
+        else
+            break;
+#else
     for(;;) {
         c = getopt(argc, argv, "ho:cN:f:mxevM:p:S:D:");
         if (c == -1)
             break;
+#endif
         switch(c) {
         case 'h':
             help();

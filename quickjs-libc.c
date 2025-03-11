@@ -28,19 +28,27 @@
 #include <inttypes.h>
 #include <string.h>
 #include <assert.h>
+#ifndef _MSC_VER
+#include <sys/time.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <dirent.h>
+#else
+#include <BaseTsd.h>
+typedef SSIZE_T ssize_t;
+#endif
 #include <errno.h>
 #include <fcntl.h>
-#include <sys/time.h>
 #include <time.h>
 #include <signal.h>
 #include <limits.h>
-#include <sys/stat.h>
-#include <dirent.h>
+
 #if defined(_WIN32)
 #include <windows.h>
 #include <conio.h>
+#ifndef _MSC_VER
 #include <utime.h>
+#endif
 #else
 #include <dlfcn.h>
 #include <termios.h>
@@ -470,8 +478,53 @@ typedef JSModuleDef *(JSInitModuleFunc)(JSContext *ctx,
 static JSModuleDef *js_module_loader_so(JSContext *ctx,
                                         const char *module_name)
 {
-    JS_ThrowReferenceError(ctx, "shared library modules are not supported yet");
-    return NULL;
+    // JS_ThrowReferenceError(ctx, "shared library modules are not supported yet");
+    // return NULL;
+    JSModuleDef *m;
+    HINSTANCE hd;
+    JSInitModuleFunc *init;
+
+    char *filename;
+    
+    if (!strchr(module_name, '/')) {
+        /* must add a '/' so that the DLL is not searched in the
+            system library paths */
+        filename = js_malloc(ctx, strlen(module_name) + 2 + 1);
+        if (!filename)
+            return NULL;
+        strcpy(filename, "./");
+        strcpy(filename + 2, module_name);
+    } else {
+        filename = (char *)module_name;
+    }
+
+    /* C module */
+    hd = LoadLibrary(filename);
+    if (filename != module_name)
+        js_free(ctx, filename);
+    if (!hd) {
+        JS_ThrowReferenceError(ctx, "could not load module filename '%s' as shared library",
+                                module_name);
+        goto fail;
+    }
+
+    init = (JSInitModuleFunc*)GetProcAddress(hd, "js_init_module");
+    if (!init) {
+        JS_ThrowReferenceError(ctx, "could not load module filename '%s': js_init_module not found",
+                                module_name);
+        goto fail;
+    }
+
+    m = init(ctx, module_name);
+    if (!m) {
+        JS_ThrowReferenceError(ctx, "could not load module filename '%s': initialization error",
+                                module_name);
+    fail:
+        if (hd)
+            FreeLibrary(hd);
+        return NULL;
+    }
+    return m;
 }
 #else
 static JSModuleDef *js_module_loader_so(JSContext *ctx,
@@ -816,9 +869,11 @@ static void js_std_file_finalizer(JSRuntime *rt, JSValue val)
     JSSTDFile *s = JS_GetOpaque(val, js_std_file_class_id);
     if (s) {
         if (s->f && s->close_in_finalizer) {
+#ifndef _MSC_VER
             if (s->is_popen)
                 pclose(s->f);
             else
+#endif
                 fclose(s->f);
         }
         js_free_rt(rt, s);
@@ -920,6 +975,7 @@ static JSValue js_std_open(JSContext *ctx, JSValueConst this_val,
     return JS_EXCEPTION;
 }
 
+#ifndef _MSC_VER
 static JSValue js_std_popen(JSContext *ctx, JSValueConst this_val,
                             int argc, JSValueConst *argv)
 {
@@ -955,6 +1011,7 @@ static JSValue js_std_popen(JSContext *ctx, JSValueConst this_val,
     JS_FreeCString(ctx, mode);
     return JS_EXCEPTION;
 }
+#endif
 
 static JSValue js_std_fdopen(JSContext *ctx, JSValueConst this_val,
                              int argc, JSValueConst *argv)
@@ -1060,9 +1117,11 @@ static JSValue js_std_file_close(JSContext *ctx, JSValueConst this_val,
         return JS_EXCEPTION;
     if (!s->f)
         return JS_ThrowTypeError(ctx, "invalid file handle");
+#ifndef _MSC_VER
     if (s->is_popen)
         err = js_get_errno(pclose(s->f));
     else
+#endif
         err = js_get_errno(fclose(s->f));
     s->f = NULL;
     return JS_NewInt32(ctx, err);
@@ -1330,6 +1389,7 @@ static int http_get_status(const char *buf)
     return atoi(p);
 }
 
+#ifndef _MSC_VER
 static JSValue js_std_urlGet(JSContext *ctx, JSValueConst this_val,
                              int argc, JSValueConst *argv)
 {
@@ -1485,6 +1545,7 @@ static JSValue js_std_urlGet(JSContext *ctx, JSValueConst this_val,
     JS_FreeValue(ctx, response);
     return JS_EXCEPTION;
 }
+#endif
 
 static JSClassDef js_std_file_class = {
     "FILE",
@@ -1517,14 +1578,18 @@ static const JSCFunctionListEntry js_std_funcs[] = {
     JS_CFUNC_DEF("setenv", 1, js_std_setenv ),
     JS_CFUNC_DEF("unsetenv", 1, js_std_unsetenv ),
     JS_CFUNC_DEF("getenviron", 1, js_std_getenviron ),
+#ifndef _MSC_VER
     JS_CFUNC_DEF("urlGet", 1, js_std_urlGet ),
+#endif
     JS_CFUNC_DEF("loadFile", 1, js_std_loadFile ),
     JS_CFUNC_DEF("strerror", 1, js_std_strerror ),
     JS_CFUNC_DEF("parseExtJSON", 1, js_std_parseExtJSON ),
 
     /* FILE I/O */
     JS_CFUNC_DEF("open", 2, js_std_open ),
+#ifndef _MSC_VER
     JS_CFUNC_DEF("popen", 2, js_std_popen ),
+#endif
     JS_CFUNC_DEF("fdopen", 2, js_std_fdopen ),
     JS_CFUNC_DEF("tmpfile", 0, js_std_tmpfile ),
     JS_CFUNC_MAGIC_DEF("puts", 1, js_std_file_puts, 0 ),
@@ -1808,18 +1873,19 @@ static JSValue js_os_remove(JSContext *ctx, JSValueConst this_val,
     filename = JS_ToCString(ctx, argv[0]);
     if (!filename)
         return JS_EXCEPTION;
-#if defined(_WIN32)
-    {
-        struct stat st;
-        if (stat(filename, &st) == 0 && S_ISDIR(st.st_mode)) {
-            ret = rmdir(filename);
-        } else {
-            ret = unlink(filename);
-        }
-    }
-#else
+// #if defined(_WIN32)
+//     {
+//         struct stat st;
+//         if (stat(filename, &st) == 0 && S_ISDIR(st.st_mode)) {
+//             ret = rmdir(filename);
+//         } else {
+//             ret = unlink(filename);
+//         }
+//     }
+// #else
+//     ret = remove(filename);
+// #endif
     ret = remove(filename);
-#endif
     ret = js_get_errno(ret);
     JS_FreeCString(ctx, filename);
     return JS_NewInt32(ctx, ret);
@@ -2004,6 +2070,18 @@ static int64_t get_time_ns(void)
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint64_t)ts.tv_sec * 1000000000 + ts.tv_nsec;
+}
+#elif defined(_MSC_VER)
+static int64_t get_time_ms(void)
+{
+	return GetTickCount();
+}
+
+static int64_t get_time_ns(void)
+{
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (int64_t)tv.tv_sec * 1000000000 + (tv.tv_usec * 1000);
 }
 #else
 /* more portable, but does not work if the date is updated */
@@ -2482,6 +2560,7 @@ static JSValue js_os_mkdir(JSContext *ctx, JSValueConst this_val,
     return JS_NewInt32(ctx, ret);
 }
 
+#if !defined(_WIN32)
 /* return [array, errorcode] */
 static JSValue js_os_readdir(JSContext *ctx, JSValueConst this_val,
                              int argc, JSValueConst *argv)
@@ -2526,12 +2605,10 @@ static JSValue js_os_readdir(JSContext *ctx, JSValueConst this_val,
     return make_obj_error(ctx, obj, err);
 }
 
-#if !defined(_WIN32)
 static int64_t timespec_to_ms(const struct timespec *tv)
 {
     return (int64_t)tv->tv_sec * 1000 + (tv->tv_nsec / 1000000);
 }
-#endif
 
 /* return [obj, errcode] */
 static JSValue js_os_stat(JSContext *ctx, JSValueConst this_val,
@@ -2628,13 +2705,11 @@ static JSValue js_os_stat(JSContext *ctx, JSValueConst this_val,
     return make_obj_error(ctx, obj, err);
 }
 
-#if !defined(_WIN32)
 static void ms_to_timeval(struct timeval *tv, uint64_t v)
 {
     tv->tv_sec = v / 1000;
     tv->tv_usec = (v % 1000) * 1000;
 }
-#endif
 
 static JSValue js_os_utimes(JSContext *ctx, JSValueConst this_val,
                             int argc, JSValueConst *argv)
@@ -2668,6 +2743,7 @@ static JSValue js_os_utimes(JSContext *ctx, JSValueConst this_val,
     JS_FreeCString(ctx, path);
     return JS_NewInt32(ctx, ret);
 }
+#endif
 
 /* sleep(delay_ms) */
 static JSValue js_os_sleep(JSContext *ctx, JSValueConst this_val,
@@ -3721,6 +3797,7 @@ static const JSCFunctionListEntry js_os_funcs[] = {
     JS_CFUNC_DEF("getcwd", 0, js_os_getcwd ),
     JS_CFUNC_DEF("chdir", 0, js_os_chdir ),
     JS_CFUNC_DEF("mkdir", 1, js_os_mkdir ),
+#if !defined(_WIN32)
     JS_CFUNC_DEF("readdir", 1, js_os_readdir ),
     /* st_mode constants */
     OS_FLAG(S_IFMT),
@@ -3729,17 +3806,16 @@ static const JSCFunctionListEntry js_os_funcs[] = {
     OS_FLAG(S_IFDIR),
     OS_FLAG(S_IFBLK),
     OS_FLAG(S_IFREG),
-#if !defined(_WIN32)
     OS_FLAG(S_IFSOCK),
     OS_FLAG(S_IFLNK),
     OS_FLAG(S_ISGID),
     OS_FLAG(S_ISUID),
-#endif
-    JS_CFUNC_MAGIC_DEF("stat", 1, js_os_stat, 0 ),
     JS_CFUNC_DEF("utimes", 3, js_os_utimes ),
+#endif
     JS_CFUNC_DEF("sleep", 1, js_os_sleep ),
     JS_CFUNC_DEF("realpath", 1, js_os_realpath ),
 #if !defined(_WIN32)
+    JS_CFUNC_MAGIC_DEF("stat", 1, js_os_stat, 0 ),
     JS_CFUNC_MAGIC_DEF("lstat", 1, js_os_stat, 1 ),
     JS_CFUNC_DEF("symlink", 2, js_os_symlink ),
     JS_CFUNC_DEF("readlink", 1, js_os_readlink ),

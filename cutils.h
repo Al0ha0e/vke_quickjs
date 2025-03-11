@@ -25,15 +25,35 @@
 #ifndef CUTILS_H
 #define CUTILS_H
 
+
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
 
+#define CONFIG_VERSION "2024-02-14"
+
+#if defined(__GNUC__) || defined(__clang__)
 #define likely(x)       __builtin_expect(!!(x), 1)
 #define unlikely(x)     __builtin_expect(!!(x), 0)
+#else
+#define likely(x)       (x)
+#define unlikely(x)     (x)
+#endif
+
+#ifdef _MSC_VER
+#include <intrin.h>
+#define PACKED_STRUCT(v) __pragma(pack(push, 1)) struct v __pragma(pack(pop))
+#define PRINTF_LIKE_CHECK(name, x, y)
+#define force_inline __forceinline
+#define no_inline __declspec(noinline)
+#define __maybe_unused
+#else
+#define PACKED_STRUCT(v) struct __attribute__((packed)) v
+#define PRINTF_LIKE_CHECK(name, x, y) __attribute__((format(name, x, y)))
 #define force_inline inline __attribute__((always_inline))
 #define no_inline __attribute__((noinline))
 #define __maybe_unused __attribute__((unused))
+#endif
 
 #define xglue(x, y) x ## y
 #define glue(x, y) xglue(x, y)
@@ -128,38 +148,76 @@ static inline int64_t min_int64(int64_t a, int64_t b)
 /* WARNING: undefined if a = 0 */
 static inline int clz32(unsigned int a)
 {
-    return __builtin_clz(a);
+#ifdef _MSC_VER
+    return __lzcnt(a);
+#else
+    return __builtin_clz(a); 
+#endif
 }
 
 /* WARNING: undefined if a = 0 */
 static inline int clz64(uint64_t a)
 {
+#ifdef _MSC_VER
+    return __lzcnt64(a);
+#else
     return __builtin_clzll(a);
+#endif
 }
 
 /* WARNING: undefined if a = 0 */
 static inline int ctz32(unsigned int a)
 {
+#ifdef _MSC_VER
+    #if defined(_M_ARM) || defined(_M_ARM64) || defined(_M_HYBRID_X86_ARM64) || defined(_M_ARM64EC)
+        return (int)_CountTrailingZeros(a);
+    #elif defined(__AVX2__) || defined(__BMI__)
+        return (int)_tzcnt_u32(a);
+    #else
+        unsigned long r;
+        _BitScanForward(&r, a);
+        return (int)r;
+    #endif
+#else
     return __builtin_ctz(a);
+#endif
 }
 
 /* WARNING: undefined if a = 0 */
 static inline int ctz64(uint64_t a)
 {
+#ifdef _MSC_VER
+    #if defined(_M_ARM) || defined(_M_ARM64) || defined(_M_HYBRID_X86_ARM64) || defined(_M_ARM64EC)
+        return (int)_CountTrailingZeros64(a);
+    #elif defined(_WIN64)
+    #if defined(__AVX2__) || defined(__BMI__)
+        return (int)_tzcnt_u64(a);
+    #else
+        unsigned long r;
+        _BitScanForward64(&r, a);
+        return (int)r;
+    #endif
+    #else
+        int l = __builtin_ctz((unsigned)a);
+        int h = __builtin_ctz((unsigned)(a >> 32)) + 32;
+        return !!((unsigned)a) ? l : h;
+    #endif
+#else
     return __builtin_ctzll(a);
+#endif
 }
 
-struct __attribute__((packed)) packed_u64 {
+PACKED_STRUCT(packed_u64 {
     uint64_t v;
-};
+};)
 
-struct __attribute__((packed)) packed_u32 {
+PACKED_STRUCT(packed_u32 {
     uint32_t v;
-};
+};)
 
-struct __attribute__((packed)) packed_u16 {
+PACKED_STRUCT(packed_u16 {
     uint16_t v;
-};
+};)
 
 static inline uint64_t get_u64(const uint8_t *tab)
 {
@@ -282,7 +340,7 @@ static inline int dbuf_put_u64(DynBuf *s, uint64_t val)
 {
     return dbuf_put(s, (uint8_t *)&val, 8);
 }
-int __attribute__((format(printf, 2, 3))) dbuf_printf(DynBuf *s,
+int PRINTF_LIKE_CHECK(printf, 2, 3) dbuf_printf(DynBuf *s,
                                                       const char *fmt, ...);
 void dbuf_free(DynBuf *s);
 static inline BOOL dbuf_error(DynBuf *s) {

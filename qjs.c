@@ -28,7 +28,9 @@
 #include <inttypes.h>
 #include <string.h>
 #include <assert.h>
+#ifndef _MSC_VER
 #include <unistd.h>
+#endif
 #include <errno.h>
 #include <fcntl.h>
 #include <time.h>
@@ -162,9 +164,9 @@ static size_t js_trace_malloc_usable_size(const void *ptr)
 static void
 #ifdef _WIN32
 /* mingw printf is used */
-__attribute__((format(gnu_printf, 2, 3)))
+PRINTF_LIKE_CHECK(gnu_printf, 2, 3)
 #else
-__attribute__((format(printf, 2, 3)))
+PRINTF_LIKE_CHECK(printf, 2, 3)
 #endif
     js_trace_malloc_printf(JSMallocState *s, const char *fmt, ...)
 {
